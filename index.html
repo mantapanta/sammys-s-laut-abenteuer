@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="theme-color" content="#10B981">
+    <title>Sammy's S-Laut Abenteuer</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+        const { Calendar, Trophy, Star, Volume2, Mic, Play, Square, ChevronRight, Award, Lock, CheckCircle } = lucide;
+
+```
+    const SpeechTherapyApp = () => {
+      const [currentScreen, setCurrentScreen] = useState('home');
+      const [currentExercise, setCurrentExercise] = useState(0);
+      const [score, setScore] = useState(0);
+      const [streak, setStreak] = useState(0);
+      const [completedDays, setCompletedDays] = useState([]);
+      const [isRecording, setIsRecording] = useState(false);
+      const [recordingTime, setRecordingTime] = useState(0);
+      const [showFeedback, setShowFeedback] = useState(false);
+      const [unlockedRewards, setUnlockedRewards] = useState(['snake-green']);
+      const [sammyMood, setSammyMood] = useState('happy');
+      const [dailyProgress, setDailyProgress] = useState(0);
+      
+      const mediaRecorderRef = useRef(null);
+      const audioChunksRef = useRef([]);
+      const timerRef = useRef(null);
+
+      const exercises = [
+        {
+          id: 1,
+          type: 'sound',
+          title: 'Der S-Laut',
+          instruction: 'Mache ein langes "Ssssss" wie eine Schlange! Denk daran: Die Zunge bleibt hinter den Zähnen!',
+          duration: 3,
+          points: 10
+        },
+        {
+          id: 2,
+          type: 'word',
+          title: 'S-Wörter',
+          words: ['Sonne', 'Sand', 'Seife', 'Salat', 'Socke'],
+          instruction: 'Sprich jedes Wort langsam und deutlich aus!',
+          points: 20
+        },
+        {
+          id: 3,
+          type: 'sentence',
+          title: 'S-Sätze',
+          sentences: ['Sammy sieht sieben Sterne', 'Die Sonne scheint sehr schön', 'Susanne sammelt süße Steine'],
+          instruction: 'Lies den Satz vor und achte auf jeden S-Laut!',
+          points: 30
+        }
+      ];
+
+      const rewards = [
+        { id: 'snake-green', name: 'Grüner Sammy', color: '#4CAF50', unlocked: true },
+        { id: 'snake-blue', name: 'Blauer Sammy', color: '#2196F3', unlockAt: 50 },
+        { id: 'snake-gold', name: 'Goldener Sammy', color: '#FFD700', unlockAt: 100 },
+        { id: 'snake-rainbow', name: 'Regenbogen Sammy', color: 'linear-gradient(45deg, red, orange, yellow, green, blue, purple)', unlockAt: 200 }
+      ];
+
+      useEffect(() => {
+        const savedData = localStorage.getItem('speechTherapyData');
+        if (savedData) {
+          const data = JSON.parse(savedData);
+          setScore(data.score || 0);
+          setStreak(data.streak || 0);
+          setCompletedDays(data.completedDays || []);
+          setUnlockedRewards(data.unlockedRewards || ['snake-green']);
+        }
+        checkDailyStreak();
+      }, []);
+
+      const checkDailyStreak = () => {
+        const today = new Date().toDateString();
+        const lastPractice = localStorage.getItem('lastPracticeDate');
+        
+        if (lastPractice) {
+          const lastDate = new Date(lastPractice);
+          const diffTime = Math.abs(new Date() - lastDate);
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          
+          if (diffDays > 1) {
+            setStreak(0);
+          }
+        }
+      };
+
+      const saveProgress = () => {
+        const data = {
+          score,
+          streak,
+          completedDays,
+          unlockedRewards,
+          lastPracticeDate: new Date().toISOString()
+        };
+        localStorage.setItem('speechTherapyData', JSON.stringify(data));
+      };
+
+      const startRecording = async () => {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          mediaRecorderRef.current = new MediaRecorder(stream);
+          audioChunksRef.current = [];
+
+          mediaRecorderRef.current.ondataavailable = (event) => {
+            audioChunksRef.current.push(event.data);
+          };
+
+          mediaRecorderRef.current.onstop = () => {
+            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+            analyzeRecording(audioBlob);
+          };
+
+          mediaRecorderRef.current.start();
+          setIsRecording(true);
+          setRecordingTime(0);
+
+          timerRef.current = setInterval(() => {
+            setRecordingTime(prev => prev + 1);
+          }, 1000);
+        } catch (err) {
+          console.error('Fehler beim Starten der Aufnahme:', err);
+          alert('Bitte erlaube den Mikrofonzugriff für die Übungen!');
+        }
+      };
+
+      const stopRecording = () => {
+        if (mediaRecorderRef.current && isRecording) {
+          mediaRecorderRef.current.stop();
+          mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+          setIsRecording(false);
+          clearInterval(timerRef.current);
+        }
+      };
+
+      const analyzeRecording = (audioBlob) => {
+        const success = Math.random() > 0.3;
+        
+        if (success) {
+          const points = exercises[currentExercise].points;
+          setScore(prev => prev + points);
+          setSammyMood('excited');
+          setShowFeedback('Super gemacht! Deine Zunge war perfekt hinter den Zähnen!');
+          checkUnlocks(score + points);
+        } else {
+          setSammyMood('encouraging');
+          setShowFeedback('Fast geschafft! Versuche die Zunge noch etwas weiter hinten zu halten.');
+        }
+
+        setTimeout(() => {
+          setShowFeedback(false);
+          setSammyMood('happy');
+        }, 3000);
+
+        setDailyProgress(prev => Math.min(prev + 20, 100));
+        
+        if (dailyProgress >= 80) {
+          completeDay();
+        }
+      };
+
+      const checkUnlocks = (newScore) => {
+        rewards.forEach(reward => {
+          if (reward.unlockAt && newScore >= reward.unlockAt && !unlockedRewards.includes(reward.id)) {
+            setUnlockedRewards(prev => [...prev, reward.id]);
+            alert(`🎉 Neue Belohnung freigeschaltet: ${reward.name}!`);
+          }
+        });
+      };
+
+      const completeDay = () => {
+        const today = new Date().toDateString();
+        if (!completedDays.includes(today)) {
+          setCompletedDays(prev => [...prev, today]);
+          setStreak(prev => prev + 1);
+          saveProgress();
+          setCurrentScreen('daily-complete');
+        }
+      };
+
+      const Snake = ({ mood = 'happy', color = '#4CAF50' }) => {
+        const moods = {
+          happy: '😊',
+          excited: '🤩',
+          encouraging: '😌'
+        };
+
+        return (
+          <div className="relative w-32 h-32 mx-auto mb-4">
+            <svg viewBox="0 0 100 100" className="w-full h-full">
+              <path
+                d="M50 80 Q30 70 25 50 T30 30 Q40 20 50 25 Q60 20 70 30 T75 50 Q70 70 50 80"
+                fill={color}
+                stroke="darkgreen"
+                strokeWidth="2"
+              />
+              <circle cx="40" cy="40" r="5" fill="white"/>
+              <circle cx="60" cy="40" r="5" fill="white"/>
+              <circle cx="40" cy="40" r="3" fill="black"/>
+              <circle cx="60" cy="40" r="3" fill="black"/>
+              <text x="50" y="90" textAnchor="middle" fontSize="20">{moods[mood]}</text>
+            </svg>
+          </div>
+        );
+      };
+
+      const Icon = ({ icon: IconComponent, ...props }) => {
+        return <IconComponent {...props} />;
+      };
+
+      const HomeScreen = () => (
+        <div className="min-h-screen bg-gradient-to-b from-blue-100 to-blue-200 p-4">
+          <div className="max-w-md mx-auto">
+            <h1 className="text-3xl font-bold text-center mb-6 text-blue-800">
+              Sammys S-Laut Abenteuer
+            </h1>
+            
+            <Snake mood={sammyMood} color={rewards.find(r => r.id === unlockedRewards[unlockedRewards.length - 1])?.color} />
+            
+            <div className="bg-white rounded-2xl shadow-lg p-6 mb-4">
+              <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center gap-2">
+                  <Icon icon={Trophy} className="text-yellow-500" />
+                  <span className="font-bold">{score} Punkte</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Icon icon={Star} className="text-orange-500" />
+                  <span className="font-bold">{streak} Tage Streak</span>
+                </div>
+              </div>
+              
+              <div className="mb-4">
+                <div className="flex justify-between text-sm text-gray-600 mb-1">
+                  <span>Heutiger Fortschritt</span>
+                  <span>{dailyProgress}%</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-3">
+                  <div 
+                    className="bg-gradient-to-r from-green-400 to-green-600 h-3 rounded-full transition-all duration-500"
+                    style={{ width: `${dailyProgress}%` }}
+                  />
+                </div>
+              </div>
+              
+              <button
+                onClick={() => setCurrentScreen('exercise')}
+                className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-4 px-6 rounded-xl text-lg shadow-md transform transition hover:scale-105 flex items-center justify-center gap-2"
+              >
+                <Icon icon={Play} /> Übung starten
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              <button
+                onClick={() => setCurrentScreen('calendar')}
+                className="bg-white p-4 rounded-xl shadow flex flex-col items-center gap-2 hover:shadow-lg transition"
+              >
+                <Icon icon={Calendar} className="text-blue-500" />
+                <span className="text-xs">Kalender</span>
+              </button>
+              <button
+                onClick={() => setCurrentScreen('rewards')}
+                className="bg-white p-4 rounded-xl shadow flex flex-col items-center gap-2 hover:shadow-lg transition"
+              >
+                <Icon icon={Award} className="text-purple-500" />
+                <span className="text-xs">Belohnungen</span>
+              </button>
+              <button
+                onClick={() => setCurrentScreen('progress')}
+                className="bg-white p-4 rounded-xl shadow flex flex-col items-center gap-2 hover:shadow-lg transition"
+              >
+                <Icon icon={Trophy} className="text-yellow-500" />
+                <span className="text-xs">Fortschritt</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+
+      const ExerciseScreen = () => {
+        const exercise = exercises[currentExercise];
+        
+        return (
+          <div className="min-h-screen bg-gradient-to-b from-green-100 to-green-200 p-4">
+            <div className="max-w-md mx-auto">
+              <button
+                onClick={() => setCurrentScreen('home')}
+                className="mb-4 text-gray-600 hover:text-gray-800"
+              >
+                ← Zurück
+              </button>
+              
+              <h2 className="text-2xl font-bold text-center mb-6 text-green-800">
+                {exercise.title}
+              </h2>
+              
+              <div className="bg-white rounded-2xl shadow-lg p-6 mb-4">
+                <div className="mb-6 p-4 bg-yellow-50 rounded-lg border-2 border-yellow-200">
+                  <p className="text-center font-medium">{exercise.instruction}</p>
+                </div>
+                
+                {exercise.type === 'word' && (
+                  <div className="grid grid-cols-2 gap-3 mb-6">
+                    {exercise.words.map((word, idx) => (
+                      <div key={idx} className="bg-blue-50 p-3 rounded-lg text-center font-bold text-lg">
+                        {word}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {exercise.type === 'sentence' && (
+                  <div className="space-y-3 mb-6">
+                    {exercise.sentences.map((sentence, idx) => (
+                      <div key={idx} className="bg-purple-50 p-3 rounded-lg text-center">
+                        {sentence}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                <div className="flex flex-col items-center">
+                  {isRecording ? (
+                    <>
+                      <div className="mb-4 text-2xl font-bold text-red-500">
+                        {recordingTime}s
+                      </div>
+                      <button
+                        onClick={stopRecording}
+                        className="bg-red-500 hover:bg-red-600 text-white p-6 rounded-full shadow-lg transform transition hover:scale-105"
+                      >
+                        <Icon icon={Square} size={32} />
+                      </button>
+                      <p className="mt-4 text-gray-600">Aufnahme läuft...</p>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={startRecording}
+                        className="bg-green-500 hover:bg-green-600 text-white p-6 rounded-full shadow-lg transform transition hover:scale-105 animate-pulse"
+                      >
+                        <Icon icon={Mic} size={32} />
+                      </button>
+                      <p className="mt-4 text-gray-600">Drücke zum Starten</p>
+                    </>
+                  )}
+                </div>
+                
+                {showFeedback && (
+                  <div className={`mt-6 p-4 rounded-lg text-center font-medium ${
+                    showFeedback.includes('Super') ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                  }`}>
+                    {showFeedback}
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex justify-between">
+                <button
+                  onClick={() => setCurrentExercise(Math.max(0, currentExercise - 1))}
+                  className="bg-gray-300 hover:bg-gray-400 text-gray-700 px-4 py-2 rounded-lg"
+                  disabled={currentExercise === 0}
+                >
+                  Vorherige
+                </button>
+                <button
+                  onClick={() => setCurrentExercise(Math.min(exercises.length - 1, currentExercise + 1))}
+                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+                  disabled={currentExercise === exercises.length - 1}
+                >
+                  Nächste <Icon icon={ChevronRight} />
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      const CalendarScreen = () => {
+        const getDaysInMonth = () => {
+          const date = new Date();
+          const year = date.getFullYear();
+          const month = date.getMonth();
+          const firstDay = new Date(year, month, 1);
+          const lastDay = new Date(year, month + 1, 0);
+          const days = [];
+          
+          for (let i = 1; i <= lastDay.getDate(); i++) {
+            days.push(new Date(year, month, i));
+          }
+          
+          return days;
+        };
+        
+        return (
+          <div className="min-h-screen bg-gradient-to-b from-purple-100 to-purple-200 p-4">
+            <div className="max-w-md mx-auto">
+              <button
+                onClick={() => setCurrentScreen('home')}
+                className="mb-4 text-gray-600 hover:text-gray-800"
+              >
+                ← Zurück
+              </button>
+              
+              <h2 className="text-2xl font-bold text-center mb-6 text-purple-800">
+                Übungskalender
+              </h2>
+              
+              <div className="bg-white rounded-2xl shadow-lg p-6">
+                <div className="grid grid-cols-7 gap-2">
+                  {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map(day => (
+                    <div key={day} className="text-center text-sm font-bold text-gray-600">
+                      {day}
+                    </div>
+                  ))}
+                  
+                  {getDaysInMonth().map((date, idx) => {
+                    const isCompleted = completedDays.includes(date.toDateString());
+                    const isToday = date.toDateString() === new Date().toDateString();
+                    
+                    return (
+                      <div
+                        key={idx}
+                        className={`
+                          aspect-square flex items-center justify-center rounded-lg
+                          ${isCompleted ? 'bg-green-500 text-white' : 'bg-gray-100'}
+                          ${isToday ? 'ring-2 ring-blue-500' : ''}
+                        `}
+                      >
+                        {isCompleted ? <Icon icon={CheckCircle} size={20} /> : date.getDate()}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      const RewardsScreen = () => (
+        <div className="min-h-screen bg-gradient-to-b from-yellow-100 to-yellow-200 p-4">
+          <div className="max-w-md mx-auto">
+            <button
+              onClick={() => setCurrentScreen('home')}
+              className="mb-4 text-gray-600 hover:text-gray-800"
+            >
+              ← Zurück
+            </button>
+            
+            <h2 className="text-2xl font-bold text-center mb-6 text-yellow-800">
+              Meine Belohnungen
+            </h2>
+            
+            <div className="grid grid-cols-2 gap-4">
+              {rewards.map(reward => {
+                const isUnlocked = unlockedRewards.includes(reward.id);
+                
+                return (
+                  <div
+                    key={reward.id}
+                    className={`
+                      bg-white rounded-2xl shadow-lg p-6 text-center
+                      ${isUnlocked ? '' : 'opacity-50'}
+                    `}
+                  >
+                    {isUnlocked ? (
+                      <>
+                        <div className="mb-4">
+                          <Snake color={reward.color} />
+                        </div>
+                        <h3 className="font-bold">{reward.name}</h3>
+                      </>
+                    ) : (
+                      <>
+                        <div className="mb-4 text-6xl">
+                          <Icon icon={Lock} className="mx-auto text-gray-400" size={64} />
+                        </div>
+                        <h3 className="font-bold text-gray-600">{reward.name}</h3>
+                        <p className="text-sm text-gray-500 mt-2">
+                          Freischalten bei {reward.unlockAt} Punkten
+                        </p>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      );
+
+      const DailyCompleteScreen = () => (
+        <div className="min-h-screen bg-gradient-to-b from-yellow-100 to-orange-200 p-4 flex items-center justify-center">
+          <div className="max-w-md mx-auto text-center">
+            <div className="text-6xl mb-4">🎉</div>
+            <h2 className="text-3xl font-bold mb-4 text-orange-800">
+              Super gemacht!
+            </h2>
+            <p className="text-xl mb-6">
+              Du hast heute deine Übungen geschafft!
+            </p>
+            <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+              <p className="text-2xl font-bold text-orange-600 mb-2">
+                {streak} Tage Streak! 🔥
+              </p>
+              <p className="text-gray-600">
+                Komm morgen wieder für noch mehr Punkte!
+              </p>
+            </div>
+            <button
+              onClick={() => setCurrentScreen('home')}
+              className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-6 rounded-xl text-lg shadow-md"
+            >
+              Zurück zum Start
+            </button>
+          </div>
+        </div>
+      );
+
+      const renderScreen = () => {
+        switch (currentScreen) {
+          case 'exercise':
+            return <ExerciseScreen />;
+          case 'calendar':
+            return <CalendarScreen />;
+          case 'rewards':
+            return <RewardsScreen />;
+          case 'daily-complete':
+            return <DailyCompleteScreen />;
+          default:
+            return <HomeScreen />;
+        }
+      };
+
+      return renderScreen();
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<SpeechTherapyApp />);
+</script>
+```
+
+</body>
+</html>
